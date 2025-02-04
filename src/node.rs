@@ -43,7 +43,7 @@ async fn participate_in_election(args: &Args, _state: Arc<RwLock<State>>) -> Res
         
         info!("Starting a new campaign.");
         let resp = client.campaign(ELECTION_NAME, args.node.clone(), lease_id).await?;
-        let leader_key = resp.leader().unwrap();
+        let leader_key = resp.leader().ok_or(Error::ElectError("Failed to retrieve the leader.".into()))?;
         info!("🥳 I am the leader ({})", args.node);
 
         if let Ok((mut keeper, _)) = client.lease_keep_alive(lease_id).await {
