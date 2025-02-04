@@ -4,14 +4,14 @@ use clap::{value_parser, Arg, Command};
 pub struct Args {
     pub node: String,
     pub host: String,
-    pub port: usize
+    pub port: usize,
 }
 
 #[derive(Default)]
 struct ArgsBuilder {
     node: String,
     host: String,
-    port: usize
+    port: usize,
 }
 
 impl Args {
@@ -80,18 +80,20 @@ fn build_command() -> Command {
                 .required(true)
                 .value_parser(value_parser!(String))
                 .long("node")
-                .help("Node name)"))
+                .help("Node name)"),
+        )
         .arg(
             Arg::new("host")
                 .required(true)
                 .value_parser(value_parser!(String))
                 .long("host")
-                .help("Etcd server IP)"))
+                .help("Etcd server IP)"),
+        )
         .arg(
             Arg::new("port")
                 .required(true)
                 .value_parser(value_parser!(usize))
                 .long("port")
-                .help("Etcd server port)")
+                .help("Etcd server port)"),
         )
 }

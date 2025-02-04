@@ -1,9 +1,9 @@
 use std::{sync::Arc, time::Duration};
 
+use crate::args::Args;
 use etcd_client::{Client, Error};
 use tokio::{sync::RwLock, time};
-use tracing::{info, error};
-use crate::args::Args;
+use tracing::{error, info};
 
 const ELECTION_NAME: &str = "leader_election";
 const TTL: i64 = 10;
@@ -14,12 +14,11 @@ pub struct State {
 
 impl State {
     pub fn new() -> Self {
-        Self { is_leader: false}  
+        Self { is_leader: false }
     }
 }
 
 pub async fn run(args: &Args, state: Arc<RwLock<State>>) -> Result<(), Error> {
-
     let res = tokio::try_join!(
         participate_in_election(args, state.clone()),
         observe_election(args, state.clone()),
@@ -34,16 +33,20 @@ pub async fn run(args: &Args, state: Arc<RwLock<State>>) -> Result<(), Error> {
     Ok(())
 }
 
-async fn participate_in_election(args: &Args, _state: Arc<RwLock<State>>) -> Result<(), Error> {    
+async fn participate_in_election(args: &Args, _state: Arc<RwLock<State>>) -> Result<(), Error> {
     let mut client = connect(args).await?;
 
     loop {
         let resp = client.lease_grant(TTL, None).await?;
         let lease_id = resp.id();
-        
+
         info!("Starting a new campaign.");
-        let resp = client.campaign(ELECTION_NAME, args.node.clone(), lease_id).await?;
-        let leader_key = resp.leader().ok_or(Error::ElectError("Failed to retrieve the leader.".into()))?;
+        let resp = client
+            .campaign(ELECTION_NAME, args.node.clone(), lease_id)
+            .await?;
+        let leader_key = resp
+            .leader()
+            .ok_or(Error::ElectError("Failed to retrieve the leader.".into()))?;
         info!("🥳 I am the leader ({})", args.node);
 
         if let Ok((mut keeper, _)) = client.lease_keep_alive(lease_id).await {
@@ -64,13 +67,18 @@ async fn observe_election(args: &Args, state: Arc<RwLock<State>>) -> Result<(), 
     let mut msg = client.observe(ELECTION_NAME).await?;
     loop {
         if let Some(resp) = msg.message().await? {
-            let kv = resp.kv().ok_or(Error::WatchError("Unable to retrieve key/value".into()))?;
+            let kv = resp
+                .kv()
+                .ok_or(Error::WatchError("Unable to retrieve key/value".into()))?;
             let key = kv.key_str()?;
-            let val = kv.value_str()?; 
-            
+            let val = kv.value_str()?;
+
             let mut st = state.write().await;
             (*st).is_leader = val == args.node;
-            info!("🟢 Current leader is {val} with key {key}, node.is_leader={}", (*st).is_leader);
+            info!(
+                "🟢 Current leader is {val} with key {key}, node.is_leader={}",
+                (*st).is_leader
+            );
         }
     }
 }
@@ -79,7 +87,7 @@ async fn connect(args: &Args) -> Result<Client, Error> {
     let server = format!("{}:{}", args.host, args.port);
 
     info!("Connecting to etcd server.");
-    let client = Client::connect([server], None).await?; 
+    let client = Client::connect([server], None).await?;
     info!("Connection to etcd server established.");
 
     Ok(client)
