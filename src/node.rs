@@ -20,7 +20,7 @@ impl State {
 
 pub async fn run(args: &Args, state: Arc<RwLock<State>>) -> Result<(), Error> {
     let res = tokio::try_join!(
-        participate_in_election(args, state.clone()),
+        participate_in_election(args),
         observe_election(args, state.clone()),
     );
 
@@ -33,7 +33,7 @@ pub async fn run(args: &Args, state: Arc<RwLock<State>>) -> Result<(), Error> {
     Ok(())
 }
 
-async fn participate_in_election(args: &Args, _state: Arc<RwLock<State>>) -> Result<(), Error> {
+async fn participate_in_election(args: &Args) -> Result<(), Error> {
     let mut client = connect(args).await?;
 
     loop {
