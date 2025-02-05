@@ -1,3 +1,5 @@
+# Building Leader Election in Distributed Systems with etcd and Rust
+
 ## Introduction
 In distributed systems, leader election is a critical process that ensures coordination and consistency across multiple nodes. One way to implement leader election is through the use of a reliable key-value store, such as `etcd`. In this article, I'll explore how to implement a simple leader election implementation in Rust using an etcd server.
 
@@ -8,7 +10,7 @@ Etcd is a distributed key-value store providing a reliable way to store data acr
 These features, when combined, form the core of a leader election service. Version 3 of etcd introduces a leader election [provides](https://etcd.io/docs/v3.5/dev-guide/api_concurrency_reference_v3/) along with the corresponding methods.
 
 
-# Implementation 
+## Implementation 
 The solution is based on a lease acquisition and renewal mechanism.  
 When a node starts, it spawns a separate task that creates a lease and then calls the `campaign` method with the lease ID as a parameter.  
 If multiple nodes are competing to be elected as the leader, only one node is selected, while the others are blocked by the `campaign` method. The blocked nodes remain in this state until the current leader either relinquishes leadership or fails, e.g., due to network partitioning at which point the lease expires. Once the lease expires, the blocked nodes are awakened and will retry to acquire leadership.
@@ -89,3 +91,11 @@ To launch the entire process for three nodes, you can start each node in a separ
 
 where the `host` and `port` refer to the URL and port number of the etcd server used to interact with the etcd cluster.
 
+## Conclusion
+Leader election is a critical component in distributed systems, ensuring high availability and fault tolerance. The implementation discussed here serves as a starting point, but to build a production-ready leader election system, it’s important to consider additional nuances specific to your use case. For example, factors like network partitioning, node failure handling, and consistency guarantees should be carefully addressed. For a deeper dive into best practices, AWS provides insights and best-practice [recommendations](https://aws.amazon.com/builders-library/leader-election-in-distributed-systems/#:~:text=Leader%20election%20is%20the%20simple,all%20requests%20in%20the%20system.).
+
+## References
+1. [Leader Election in Distributed Systems](https://aws.amazon.com/builders-library/leader-election-in-distributed-systems/#:~:text=Leader%20election%20is%20the%20simple,all%20requests%20in%20the%20system.)
+2. [Etcd: a distributed, reliable key-value store](https://etcd.io/)
+3. [An etcd v3 API client for Rust](https://github.com/etcdv3/etcd-client)
+4. [How to do distributed locking](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
