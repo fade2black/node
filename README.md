@@ -8,14 +8,84 @@ Etcd is a distributed key-value store providing a reliable way to store data acr
 These features, when combined, form the core of a leader election service. Version 3 of etcd introduces a leader election [provides](https://etcd.io/docs/v3.5/dev-guide/api_concurrency_reference_v3/) along with the corresponding methods.
 
 
-# Solution 
-The solution is based on the lease acqusition and renewal mechanism.
-When a node starts it spawns a separate taks that creates a lease and then calls the method `campaign` with the elase id as a parameter.
-If we have multiple nodes trying to get elected as the leader, then only one node is elected and the others are blocked by the `campaign` method until the current leader quits leadership or fails (for example as a result of network partitioning) and the lease expires. As soon as it happens and the lease expires the blocked nodes wake up and retry to acquire leadership.
+# Implementation 
+The solution is based on a lease acquisition and renewal mechanism.  
+When a node starts, it spawns a separate task that creates a lease and then calls the `campaign` method with the lease ID as a parameter.  
+If multiple nodes are competing to be elected as the leader, only one node is selected, while the others are blocked by the `campaign` method. The blocked nodes remain in this state until the current leader either relinquishes leadership or fails, e.g., due to network partitioning at which point the lease expires. Once the lease expires, the blocked nodes are awakened and will retry to acquire leadership.
 
-Once a node acquire leadership, it keep alive its leader status by periodically sending keep-alive request to the `etcd` server to renew the lease so the lease won't expire while other nodes are blocked and wait for another phase of leader election. At the same time nodes observe election proclamations in-order as made by the election’s elected leaders to be aware of the current leader node.
-
-
+Once a node acquires leadership, it maintains its status by periodically sending keep-alive requests to the `etcd` server to renew the lease. This ensures that the lease doesn't expire while the other nodes remain blocked and wait for the next leader election phase.
 
 
+```rust
+async fn participate_in_election(args: &Args) -> Result<(), Error> {
+    let mut client = connect(args).await?;
+
+    loop {
+        let resp = client.lease_grant(TTL, None).await?;
+        let lease_id = resp.id();
+
+        info!("Starting a new campaign.");
+        let resp = client
+            .campaign(ELECTION_NAME, args.node.clone(), lease_id)
+            .await?;
+        let leader_key = resp
+            .leader()
+            .ok_or(Error::ElectError("Failed to retrieve the leader.".into()))?;
+        info!("🥳 I am the leader ({})", args.node);
+
+        if let Ok((mut keeper, _)) = client.lease_keep_alive(lease_id).await {
+            loop {
+                info!("⏰ Keeping alive the lease {}...", leader_key.key_str()?);
+                keeper.keep_alive().await?;
+                time::sleep(Duration::from_secs(7)).await;
+            }
+        } else {
+            error!("Failed to keep lease alive. Re-campaigning.");
+        }
+    }
+}
+```
+
+At the same time, nodes observe election proclamations in order, as made by the elected leaders, to stay aware of the current leader.
+
+
+```rust
+async fn observe_election(args: &Args, state: Arc<RwLock<State>>) -> Result<(), Error> {
+    let mut client = connect(args).await?;
+
+    let mut msg = client.observe(ELECTION_NAME).await?;
+    loop {
+        if let Some(resp) = msg.message().await? {
+            let kv = resp
+                .kv()
+                .ok_or(Error::WatchError("Unable to retrieve key/value".into()))?;
+            let key = kv.key_str()?;
+            let val = kv.value_str()?;
+
+            let mut st = state.write().await;
+            (*st).is_leader = val == args.node;
+            info!(
+                "🟢 Current leader is {val} with key {key}, node.is_leader={}",
+                (*st).is_leader
+            );
+        }
+    }
+}
+```
+You can find the full implementation [here](https://github.com/fade2black/node).
+
+To launch the entire process for three nodes, you can start each node in a separate console window as follows
+```bash
+% node --node node1 --host 127.0.0.1 --port 50686
+```
+
+```bash
+% node --node node2 --host 127.0.0.1 --port 50686
+```
+
+```bash
+% node --node node3 --host 127.0.0.1 --port 50686
+```
+
+where the `host` and `port` refer to the URL and port number of the etcd server used to interact with the etcd cluster.
 
